@@ -5,6 +5,11 @@ import yaml
 import re
 from .formatter import Formatter  # format awesome stuff
 
+try:
+    import pandas     # if available load `pandas`
+except ImportError:
+    pass              # all calls using `pandas` will fail
+
 
 # Extension to an existing argument -----------------------------------------------------------------------
 
@@ -93,15 +98,15 @@ def auto_attach_yaml_representers(cls):
 class ConfigYamlLoader(yaml.SafeLoader):
     """A config loader for all Deep8 projects."""
 
-    def construct_pd_timestamp(self, node) -> pd.Timestamp:
+    def construct_pandas_timestamp(self, node) -> pandas.Timestamp:
         """"!Timestamp" constructs a pandas Timestamp from the string."""
         string_repr = self.construct_scalar(node)
-        return pd.Timestamp(string_repr)
+        return pandas.Timestamp(string_repr)
 
-    def construct_pd_timedelta(self, node) -> pd.Timedelta:
+    def construct_pandas_timedelta(self, node) -> pandas.Timedelta:
         """"!Timedelta" constructs a pandas Timedelta from the string."""
         string_repr = self.construct_scalar(node)
-        return pd.Timedelta(string_repr)
+        return pandas.Timedelta(string_repr)
 
     def construct_extended_argument(self, node) -> ExtendedArgument:
         """"!r" constructs an `ExtendedArgument` instance."""
@@ -111,11 +116,11 @@ class ConfigYamlLoader(yaml.SafeLoader):
 @auto_attach_yaml_representers
 class ConfigYamlDumper(yaml.SafeDumper):
 
-    def represent_pd_timestamp(self, data: pd.Timestamp):
+    def represent_pandas_timestamp(self, data: pandas.Timestamp):
         """Turn timestamp into representation."""
         return self.represent_scalar('!Timestamp', str(data))
 
-    def represent_pd_timedelta(self, data: pd.Timedelta):
+    def represent_pandas_timedelta(self, data: pandas.Timedelta):
         """Turn time delta into representation."""
         return self.represent_scalar('!Timedelta', str(data))
 
