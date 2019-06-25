@@ -1,0 +1,10 @@
+project:
+    license:  GNU General Public License (Version 3)
+
+
+python:
+    requirements:
+        - name:         jinja2
+          description:  render templates
+        - name:         pyyaml
+          description:  load and save yaml files
