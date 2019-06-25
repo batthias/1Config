@@ -1,0 +1,52 @@
+# Configuration file schema
+# This specifies what a configuration file must look like
+project:  # Project information (required field)
+    name: !string
+        match: [A-Za-z0-9_-]
+        hint: my-project
+
+    version: !string
+        match: [0-9]\.[0-9](\.[0-9])?
+        default: 1.0.0
+        hint: version number
+    description: !string
+        minLength: 20
+        hint: Insert your description here
+
+    author: !options
+        - !string Your Name
+        - !list_of_strings [Author 1, Author 2]
+    copyright: 2019, bosewitz.com
+
+    website:
+        Homepage:   https://bosewitz.com/software/one-config
+
+tasks:  # Tasks to be completet
+    - name:         generate-files
+      cmd:          python -m oneconfig.generator
+      description:  Run an upscaling analysis.
+
+python:  # Python settings ----------------------------------------------------------
+    kernel:
+        default: ?.?
+        required: >= ?.?
+
+    importName: ???
+
+    requirements:
+        - name:         ???
+          description:  ????
+
+    dependenciesLock: !load dependencies.lock.yml  # lock some versions which worked
+
+    style:
+        indentation: ???  # options: "{n} spaces", "tabs", you cannot mix
+        trailingCommas: ???  # options: "all", "any", "none"
+        typeHints: ???  # options: "all", "any", "none"
+
+tests:
+    testSuite:  ???
+
+generatedFiles:
+    - file:     ???
+      template: ???
