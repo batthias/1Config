@@ -1,0 +1,2 @@
+{# Python requirements file - OneConfig template file #}
+{# A python requirements.txt file where the requirements are defined #}

@@ -11,12 +11,16 @@ except ImportError:
     pass              # all calls using `pandas` will fail
 
 
-# Extension to an existing argument -----------------------------------------------------------------------
+# Extension to an existing argument ---------------------------------------------------------------
+
 
 class ExtendedArgument(object):
     """An Extension to an existing argument."""
     # TODO: Add usage examples and tests
+
+    # Class property which stores the formatter for json
     formatter = Formatter(dot_item_access=True)  # use a more powerfull formatter
+
 
     def __init__(self, value_pattern):
         """Create an extended property which uses other properties.
@@ -55,12 +59,13 @@ class ExtendedArgument(object):
         self.value_pattern = value
 
 
-# Decorators ----------------------------------------------------------------------------------------------------------
+# Decorators --------------------------------------------------------------------------------------
 
 def auto_attach_yaml_constructors(cls):
     """Adds all functions starting with 'construct_' to the Loader.
 
-    To achieve this the docstring must start with ``classname``,
+    This function should be called (or used as a Decorator) on the YAML-Loader class.
+    To achieve this the docstring must start with ``"!Shortcut"``,
     where ``classname`` is the name of the class you want to use.
     """
     for attr in dir(cls):
@@ -75,7 +80,9 @@ def auto_attach_yaml_constructors(cls):
 def auto_attach_yaml_representers(cls):
     """Adds all functions starting with 'represent_' to the Dumper.
 
-    To achieve this the typehint for the ``data`` argument must be the type you want to represent.
+    This function should be called (or used as a Decorator) on a YAML-Dumper class.
+    To achieve this the typehint for the ``data`` argument must be the class
+    you want to represent.
     """
     for attr in dir(cls):
         if attr.startswith('represent_'):
@@ -83,20 +90,24 @@ def auto_attach_yaml_representers(cls):
             doc = str(method.__doc__)
 
             try:
-                annotation = method.__annotations__['data']
+                represented_class = method.__annotations__['data']
             except KeyError:
                 pass
             else:
-                cls.add_representer(annotation, method)
+                cls.add_representer(represented_class, method)
 
     return cls
 
 
-# Loader and Dumper ---------------------------------------------------------------------------------------------------
+# Loader and Dumper -------------------------------------------------------------------------------
 
 @auto_attach_yaml_constructors
 class ConfigYamlLoader(yaml.SafeLoader):
-    """A config loader for all Deep8 projects."""
+    """A configuration loader created for OneConfig projects.
+
+    ... but of course this might also be useful if you need configuration files
+    in some other context.
+    """
 
     def construct_pandas_timestamp(self, node) -> pandas.Timestamp:
         """"!Timestamp" constructs a pandas Timestamp from the string."""
@@ -109,12 +120,13 @@ class ConfigYamlLoader(yaml.SafeLoader):
         return pandas.Timedelta(string_repr)
 
     def construct_extended_argument(self, node) -> ExtendedArgument:
-        """"!r" constructs an `ExtendedArgument` instance."""
+        """"!r" constructs an ``ExtendedArgument`` instance."""
         string_repr = self.construct_scalar(node)
         return ExtendedArgument(string_repr)
 
 @auto_attach_yaml_representers
 class ConfigYamlDumper(yaml.SafeDumper):
+    """A Configuration dumper created for OneConfig projects."""
 
     def represent_pandas_timestamp(self, data: pandas.Timestamp):
         """Turn timestamp into representation."""
@@ -125,25 +137,45 @@ class ConfigYamlDumper(yaml.SafeDumper):
         return self.represent_scalar('!Timedelta', str(data))
 
 
-# Configuration class -------------------------------------------------------------------------------------------------
+# Configuration class -----------------------------------------------------------------------------
 
 class Configuration(dict):
     """Configuration object.
 
-    To access attributes you can use square brackets or call the object with a json-path.
+    To access attributes you can have two choices:
+    * use square brackets to access a child element, e.g. ``my_config['color']``
+    * call the object with a json-path,              e.g. ``my_config('colors.green.hue')``
     """
+    config_loader_class = ConfigYamlLoader
+    config_dumper_class = ConfigYamlDumper
 
     def __init__(self, *args, **kwargs):
+        """Create a new configuration.
+
+        Supports the same arguments as ``dict`` does.
+        Additionally you can supply ``source_filename`` so the config knows
+        which file it was loaded from.
+        """
         if 'source_filename' in kwargs:
             self.source_filename =  kwargs['source_filename']
+            del kwargs['source_filename']
         else:
             self.source_filename = None
         super().__init__(*args, **kwargs)
 
     def __repr__(self) -> str:
+        """Represent the configuration as a string."""
         return f'{self.__class__.__name__}({super().__repr__()})'
 
     def resolve_extended_arguments(self, data: Any):
+        """Resolve all the extended arguments in the data.
+
+        This needs to be done after data changes, so the arguments are updated.
+
+        Arguments:
+            data:   A part of the configurations YAML tree you want to resolve.
+
+        """
         if isinstance(data, ExtendedArgument):
             return data.__get__(root=self)
         elif isinstance(data, dict):
@@ -156,20 +188,42 @@ class Configuration(dict):
 
     @classmethod
     def load_from_yaml(cls, filename: str) -> 'Configuration':
+        """Load a YAML file with the configuration.
+
+        Arguments:
+            filename:   The filename where the configuration YAML file can be found.
+
+        The encoding must be UTF-8. I am not allowing anything else as it would be silly.
+        """
         with open(filename, 'r', encoding='utf8') as f:
             return cls.from_yaml(input_stream=f, source_filename=filename)
 
     @classmethod
     def from_yaml(cls, input_stream, source_filename=None) -> 'Configuration':
-        config = Configuration(yaml.load(input_stream, Loader=ConfigYamlLoader), source_filename=source_filename)
+        """Create a configuration from a YAML string.
+
+        Arguments:
+            input_stream:       an open file object or string or whatever
+            source_filename:    optionally supply which file this is from
+
+        """
+        config = Configuration( yaml.load(input_stream, Loader=cls.config_loader_class),
+                                source_filename=source_filename )
         return config.resolve_extended_arguments(config)
 
     def save_as_yaml(self, filename: str) -> None:
+        """Save this config as a YAML file."""
         with open(filename, 'w') as f:
             self.as_yaml(output_stream=f)  # return value is ignored
+        if self.source_filename is None:    # had no file before
+            self.source_filename = filename  # ... now it has
 
     def as_yaml(self, output_stream=None) -> str:
-        return yaml.dump(self, output_stream, default_flow_style=False, Dumper=ConfigYamlDumper)
+        """Represent config as a YAML string."""
+        return yaml.dump( self,
+                          output_stream,
+                          default_flow_style=False,
+                          Dumper=self.__class__.config_dumper_class)
 
     def __call__(self, path: str, default: str = NotImplemented):
         """Get a node in the config tree by it’s (json) path."""
@@ -200,12 +254,12 @@ class Configuration(dict):
         match = matches[-1]
         node[match[0] or int(match[1])] = value
 
-    def check_integrity(self, template: dict):
-        """Check whether the config adheres to the given template.
+    def check_integrity(self, schema: dict):
+        """Check whether the config adheres to the given schema.
 
         Attributes:
-            template:      Template to be checked against
+            schema:      Schema to be checked against
 
         """
         # TODO: create this functionality, that checks
-        raise NotImplementedError('No integrity check yet')
+        raise NotImplementedError('No integrity check possible yet')
